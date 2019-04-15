@@ -10,7 +10,6 @@ extern "C" {
 }
 char senaddr[256] = "0x28";
 
-
 int main() {
     get_i2cbus(senaddr);
     set_mode(ndof);

@@ -37,6 +37,8 @@
 
 //------
 /* _countof helper */
+#include <cstdio>
+
 #if !defined(_countof)
 #if !defined(__cplusplus)
 #define _countof(_Array) (sizeof(_Array) / sizeof(_Array[0]))

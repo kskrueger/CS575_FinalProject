@@ -27,19 +27,16 @@ file(GLOB hitec_control
         "hitec_controller/*.cpp"
         )
 
-#[[file(GLOB IMU
-        "BNO055/RPi_BNO055/*.h"
-        "BNO055/RPi_BNO055/*.cpp"
-        "BNO055/RPi_BNO055/utility/*.h"
-        "BNO055/RPi_BNO055/utility/*.cpp"
-        )]]
-
 file(GLOB IMU
         "BNO055/pi-bno055/i2c_bno055.c"
         "BNO055/pi-bno055/include/getbno055.h")
 
-add_executable(Main ${hitec_control} ${IMU} main.cpp robot/Robot.cpp robot/Robot.h robot/Drivetrain.cpp robot/Drivetrain.h robot/Lidar.cpp robot/Lidar.h robot/Common.cpp robot/Common.h)
-add_executable(Main2 ${hitec_control} ${IMU} telemetry_test.cpp)
+file(GLOB ROBOT
+        "robot/*.cpp"
+        "robot/*.h")
+
+add_executable(Main ${hitec_control} ${IMU} main.cpp)
+add_executable(Main2 ${hitec_control} ${IMU} ${ROBOT} robot_test.cpp)
 ###### main.cpp ultra_simple.cpp simple.cpp cartesian.cpp telemetry_test.cpp imu_test.cpp test_python.cpp python_common.h
 
 target_link_libraries(Main wiringPi)

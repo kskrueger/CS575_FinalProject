@@ -11,27 +11,21 @@
 
 class Drivetrain {
 public:
-    void init(bool *running);
-
+    Drivetrain();
     void reset_encoders(HiTechnicMotor motor1, HiTechnicMotor motor2);
-
     void set_motors_powers(int power1, int power2);
-
     void set_motors_powers(int power0);
-
     void time_drive(int power, int milliseconds);
 
-    void encoder_drive(int power, int target_encoder_counts);
+    void encoder_drive(int power1, int power2, int target_encoder_counts1, int target_encoder_counts2);
 
     void encoder_drive(int power, int target_encoder_counts1, int target_encoder_counts2);
+    void encoder_drive(int power, int target_encoder_counts);
 
+    void distance_drive(int power1, int power2, double distance_cm1, double distance_cm2);
     void distance_drive(int power, double distance_cm);
 
-    void distance_drive(int power, double distance_cm1, double distance_cm2);
-
-    void get_heading();
-
-
+    double get_heading();
 };
 
 
