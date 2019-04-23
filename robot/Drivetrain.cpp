@@ -4,10 +4,9 @@
 
 //***** IMPORTS *****
 #include "Drivetrain.h"
-#include <chrono>
 
 //***** GLOBALS *****
-//bool* RUNNING;
+bool RUNNING = true;
 
 //***** METHODS *****
 void resetEncoders(HiTechnicMotor motor1, HiTechnicMotor motor2);
@@ -19,47 +18,72 @@ const double RATIO = 28 / 36.0;
 const double TICKS_PER_CM = (ENCODER_TICKS / RATIO) / (WHEEL_DIAMETER_CM * 3.14); //encoder count/ticks per cm dist
 
 //***** INITIALIZE *****
-HiTechnicDcMotorController mc1(HiTechnicController::DAISY_CHAIN_POSITION_NONE);
-HiTechnicMotor motor1(&mc1, HiTechnicDcMotorController::MotorPort::MOTOR_PORT_1);
-HiTechnicMotor motor2(&mc1, HiTechnicDcMotorController::MotorPort::MOTOR_PORT_2);
+std::thread imuThread;
 
 //***** IMU *****
 extern "C" {
 #include "../BNO055/pi-bno055/include/getbno055.h"
 }
 char senaddr[256] = "0x28";
-struct bnoeul IMU;
+double imuHeading;
 
-Drivetrain::Drivetrain() {
+auto heading = []() {
+    get_i2cbus(senaddr);
+    set_mode(ndof);
+    struct bnoeul bnod;
+    while (RUNNING) {
+        get_eul(&bnod);
+        imuHeading = bnod.eul_head;
+        //printf("Angle: %f\n", bnod.eul_head);
+    }
+};
+
+Drivetrain::Drivetrain(/*bool &running*/) {
     //RUNNING = running;
+    //mc1 = HiTechnicDcMotorController(HiTechnicController::DAISY_CHAIN_POSITION_NONE);
+    //motor1 = HiTechnicMotor(&mc1, HiTechnicDcMotorController::MotorPort::MOTOR_PORT_1);
+    //motor2 = HiTechnicMotor(&mc1, HiTechnicDcMotorController::MotorPort::MOTOR_PORT_2);
 
-    motor1.setDirection(HiTechnicMotor::Direction::FORWARD);
+    /*motor1.setDirection(HiTechnicMotor::Direction::FORWARD);
     motor2.setDirection(HiTechnicMotor::Direction::REVERSE);
     motor1.setZeroPowerBehavior(HiTechnicDcMotorController::ZeroPowerBehavior::BRAKE);
     motor2.setZeroPowerBehavior(HiTechnicDcMotorController::ZeroPowerBehavior::BRAKE);
 
-    //resetEncoders(motor1, motor2);
+    motor1.setRunMode(HiTechnicDcMotorController::RunMode::RUN_USING_ENCODER);
+    motor2.setRunMode(HiTechnicDcMotorController::RunMode::RUN_USING_ENCODER);*/
 
-    get_i2cbus(senaddr);
-    set_mode(ndof);
+    //resetEncoders();
+
 };
 
+void Drivetrain::startThread() {
+    // This thread is launched by using
+    // lamda expression as callable
+    imuThread = std::thread(heading);
+    printf("IMU thread started\n");
+}
+
+/*
 void wait(int milliseconds) {
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
     int elapsed = 0;
 
-    while (elapsed < milliseconds/* && RUNNING*/) {
+    while (elapsed < milliseconds && RUNNING) {
         std::chrono::steady_clock::time_point current = std::chrono::steady_clock::now();
         elapsed = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(current - begin).count());
     }
 }
 
-void Drivetrain::reset_encoders(HiTechnicMotor motor1, HiTechnicMotor motor2) {
+void Drivetrain::reset_encoders() {
+    HiTechnicDcMotorController mc1 = HiTechnicDcMotorController(HiTechnicDcMotorController::DaisyChainPosition::DAISY_CHAIN_POSITION_FIRST);
+    HiTechnicMotor motor1 = HiTechnicMotor(&mc1, HiTechnicDcMotorController::MotorPort::MOTOR_PORT_1);
+    HiTechnicMotor motor2 = HiTechnicMotor(&mc1, HiTechnicDcMotorController::MotorPort::MOTOR_PORT_2);
+
     motor1.setRunMode(HiTechnicDcMotorController::RunMode::STOP_AND_RESET_ENCODER);
     motor2.setRunMode(HiTechnicDcMotorController::RunMode::STOP_AND_RESET_ENCODER);
 
-    motor1.setRunMode(HiTechnicDcMotorController::RunMode::RUN_TO_POSITION);
-    motor2.setRunMode(HiTechnicDcMotorController::RunMode::RUN_TO_POSITION);
+    motor1.setRunMode(HiTechnicDcMotorController::RunMode::RUN_USING_ENCODER);
+    motor2.setRunMode(HiTechnicDcMotorController::RunMode::RUN_USING_ENCODER);
 }
 
 void Drivetrain::set_motors_powers(int power1, int power2) {
@@ -82,8 +106,9 @@ void Drivetrain::encoder_drive(int power1, int power2, int target_encoder_counts
     motor1.setTargetPosition(target_encoder_counts1);
     motor2.setTargetPosition(target_encoder_counts2);
     set_motors_powers(power1, power2);
-    while ((motor1.isBusy() || motor2.isBusy())/* && RUNNING*/) {
+    while ((motor1.isBusy() || motor2.isBusy())) {
         //wait
+        printf("1: %d, 2: %d\n", motor1.getCurrentPosition(), motor2.getCurrentPosition());
     }
     set_motors_powers(0);
 }
@@ -105,7 +130,38 @@ void Drivetrain::distance_drive(int power, double distance_cm) {
     distance_drive(power, power, distance_cm, distance_cm);
 }
 
+void Drivetrain::test() {
+    HiTechnicDcMotorController mc1(HiTechnicController::DAISY_CHAIN_POSITION_NONE);
+    HiTechnicMotor motor1(&mc1, HiTechnicDcMotorController::MotorPort::MOTOR_PORT_1);
+    HiTechnicMotor motor2(&mc1, HiTechnicDcMotorController::MotorPort::MOTOR_PORT_2);
+    motor2.setDirection(HiTechnicMotor::Direction::REVERSE);
+    motor1.setZeroPowerBehavior(HiTechnicDcMotorController::ZeroPowerBehavior::BRAKE);
+    motor2.setZeroPowerBehavior(HiTechnicDcMotorController::ZeroPowerBehavior::BRAKE);
+
+    //robot.drivetrain.reset_encoders();
+
+    motor1.setRunMode(HiTechnicDcMotorController::RunMode::STOP_AND_RESET_ENCODER);
+    motor2.setRunMode(HiTechnicDcMotorController::RunMode::STOP_AND_RESET_ENCODER);
+
+    motor1.setRunMode(HiTechnicDcMotorController::RunMode::RUN_USING_ENCODER);
+    motor2.setRunMode(HiTechnicDcMotorController::RunMode::RUN_USING_ENCODER);
+
+    motor1.setPower(20);
+    motor2.setPower(20);
+
+    printf("Power set\n");
+
+    while (motor1.getCurrentPosition() < 1000) {
+        printf("Pos: %d\n",motor1.getCurrentPosition());
+    }
+}*/
+
 double Drivetrain::get_heading() {
-    get_eul(&IMU);
-    return IMU.eul_head;
+    return imuHeading;
+}
+
+void Drivetrain::imuStop() {
+    RUNNING = false;
+    if (imuThread.joinable())
+        imuThread.join();
 }

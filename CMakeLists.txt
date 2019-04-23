@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.7.2)
 project(575ResearchProject)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 
 #ADDD BACK
 find_package(OpenCV REQUIRED)
@@ -35,7 +35,7 @@ file(GLOB ROBOT
         "robot/*.cpp"
         "robot/*.h")
 
-add_executable(Main ${hitec_control} ${IMU} main.cpp)
+add_executable(Main ${hitec_control} ${IMU} PID.cpp main.cpp)
 add_executable(Main2 ${hitec_control} ${IMU} ${ROBOT} robot_test.cpp)
 ###### main.cpp ultra_simple.cpp simple.cpp cartesian.cpp telemetry_test.cpp imu_test.cpp test_python.cpp python_common.h
 
@@ -43,6 +43,8 @@ target_link_libraries(Main wiringPi)
 target_link_libraries(Main2 wiringPi)
 target_link_libraries(Main pigpio)
 target_link_libraries(Main2 pigpio)
+target_link_libraries(Main pthread)
+target_link_libraries(Main2 pthread)
 #target_link_libraries(Main ncurses)
 
 if (UNIX)

@@ -10,12 +10,11 @@
 
 #endif //INC_575RESEARCHPROJECT_ROBOT_H
 
-//bool RUNNING = false;
-
 class Robot {
 public:
     Robot();
-
     Drivetrain drivetrain = Drivetrain();
     Lidar lidar = Lidar();
+
+    void stop();
 };

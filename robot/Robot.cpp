@@ -9,3 +9,6 @@ Robot::Robot() {
     lidar = Lidar();
 };
 
+void Robot::stop() {
+    drivetrain.imuStop();
+}
