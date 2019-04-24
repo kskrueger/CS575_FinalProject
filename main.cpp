@@ -15,7 +15,6 @@
 using namespace std;
 
 //LIDAR SETUP
-#include <stdlib.h>
 
 #include "rplidar.h" //RPLIDAR standard sdk, all-in-one header
 
@@ -82,6 +81,9 @@ extern "C" {
 char senaddr[256] = "0x28";
 double start_heading = 0;
 double heading = 0;
+
+int left_dist = 0;
+int right_dist = 0;
 
 //***** OPENCV *****
 #include <opencv2/objdetect/objdetect.hpp>
@@ -170,18 +172,29 @@ int main(int argc, const char *argv[]) {
     //thread mapThread(updateMap);
 
     resetEncoders(motor1, motor2);
-    auto drive = [&](int dist) {
+    auto drive = [&](int speed, int dist) {
         printf("Drive Thread Start:");
-        motor1.setPower(20);
-        motor2.setPower(20);
+        motor1.setPower(static_cast<int8_t>(speed));
+        motor2.setPower(static_cast<int8_t>(speed));
         while (RUNNING && DRIVE &&
                (motor1.getCurrentPosition() + motor2.getCurrentPosition()) / 2.0 / TICKS_PER_CM < dist) {
             if (obstacle) {
-                motor1.setPower(10);
-                motor2.setPower(-10);
-            } else {
-                motor1.setPower(20);
-                motor2.setPower(20);
+                cout << "Stop! Obstacle." << endl;
+                motor1.setPower(0);
+                motor2.setPower(0);
+                RUNNING = false;
+                break;
+            } else if (abs(left_dist - right_dist) < 5) {
+                motor1.setPower(static_cast<int8_t>(speed));
+                motor2.setPower(static_cast<int8_t>(speed));
+            } else if (left_dist < right_dist) {
+                //cout << "turn left" << endl;
+                motor1.setPower(static_cast<int8_t>(speed * .9));
+                motor2.setPower(static_cast<int8_t>(speed * 1.1));
+            } else if (right_dist < left_dist) {
+                //cout << "turn right" << endl;
+                motor1.setPower(static_cast<int8_t>(speed * 1.1));
+                motor2.setPower(static_cast<int8_t>(speed * .9));
             }
         }
         DRIVE = false;
@@ -193,20 +206,65 @@ int main(int argc, const char *argv[]) {
         printf("** Obstacle Thread Start **\n");
         while (RUNNING) {
             bool temp = false;
-            for (int y = (int) (curr_y); y < curr_y + stopDist; y++) {
-                for (int x = (int) curr_x - 15; x < (int) curr_x + 15; x++) {
-                    if (mapArr[y][x] > 2 & !obstacle) {
-                        //printf("OBSTACLE DETECTED! %dcm\n", y-(int)curr_y);
+            int start_y = (int) curr_y;
+            int start_x = (int) curr_x;
+            for (int fwd = 0; fwd < stopDist; fwd++) {
+                for (int side = -20; side < 20; side++) {
+                    double radian_angle = fmod((heading), 360) * 3.14 / 180;
+                    int y = std::max(std::min(int(start_y + fwd * cos(radian_angle) + side * sin(radian_angle)),
+                                              WORLD_HEIGHT - 1), 0);
+                    int x = std::max(std::min(int(start_x + fwd * sin(radian_angle) - side * cos(radian_angle)),
+                                              WORLD_WIDTH - 1), 0);
+                    if (mapArr[y][x] >= 1) {
                         temp = true;
+                        obstacle = true;
                     }
                 }
             }
-            obstacle = temp;
+
+            //obstacle = temp;
+            bool found = false;
+            for (int fwd = 0; fwd < 250; fwd++) {
+                for (int side = -5; side < 5; side++) {
+                    double radian_angle = fmod((heading - 15), 360) * 3.14 / 180;
+                    int y = std::max(std::min(int(start_y + fwd * cos(radian_angle) + side * sin(radian_angle)),
+                                              WORLD_HEIGHT - 1), 0);
+                    int x = std::max(std::min(int(start_x + fwd * sin(radian_angle) - side * cos(radian_angle)),
+                                              WORLD_WIDTH - 1), 0);
+                    if (mapArr[y][x] >= 1) {
+                        //printf("Left Dist! %dcm\n", (int) std::sqrt(std::pow(curr_x - x, 2) + std::pow(curr_y - y, 2)));
+                        left_dist = (int) std::sqrt(std::pow(curr_x - x, 2) + std::pow(curr_y - y, 2));
+                        found = true;
+                    }
+                }
+            }
+            if (!found) {
+                left_dist = 0;
+            }
+
+            found = false;
+            for (int fwd = 0; fwd < 250; fwd++) {
+                for (int side = -5; side < 5; side++) {
+                    double radian_angle = fmod((heading + 15), 360) * 3.14 / 180;
+                    int y = std::max(std::min(int(start_y + fwd * cos(radian_angle) + side * sin(radian_angle)),
+                                              WORLD_HEIGHT - 1), 0);
+                    int x = std::max(std::min(int(start_x + fwd * sin(radian_angle) - side * cos(radian_angle)),
+                                              WORLD_WIDTH - 1), 0);
+                    if (mapArr[y][x] >= 1) {
+                        //printf("Right Dist! %dcm\n", (int) std::sqrt(std::pow(curr_x - x, 2) + std::pow(curr_y - y, 2)));
+                        right_dist = (int) std::sqrt(std::pow(curr_x - x, 2) + std::pow(curr_y - y, 2));
+                        found = true;
+                    }
+                }
+            }
+            if (!found) {
+                right_dist = 0;
+            }
         }
     };
 
     thread obstacleThread(obstacleCheck, 75);
-    //thread driveThread(drive, 300);
+    thread driveThread(drive, 30, 2250);
 
 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
@@ -215,12 +273,12 @@ int main(int argc, const char *argv[]) {
     double encoder_cm = 0;
     double last_encoders = 0;
 
-    motor1.setPower(40);
-    motor2.setPower(40);
+    //motor1.setPower(40);
+    //motor2.setPower(40);
 
     // fetech result and print it out...
     //abs(encoder_cm)
-    while (abs(encoder_cm) < 700 && !obstacle) {
+    while (/*abs(encoder_cm) < 700 && */DRIVE && RUNNING && !obstacle) {
         std::chrono::steady_clock::time_point current = std::chrono::steady_clock::now();
         elapsed = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(current - begin).count());
 
@@ -230,7 +288,8 @@ int main(int argc, const char *argv[]) {
         curr_y += (encoder_cm - last_encoders) * sin((heading + 90) * 3.14 / 180);
         curr_x += (encoder_cm - last_encoders) * -cos((heading + 90) * 3.14 / 180);
         last_encoders = encoder_cm;
-        printf("Y: %3.2f \t X: %3.2f \t Heading: %3.2f \t Time: %d\n", curr_y, curr_x, heading, elapsed);
+        printf("Y: %3.2f \t X: %3.2f \t Heading: %3.2f \t Time: %d \t Left: %d \t Right: %d\n", curr_y, curr_x, heading,
+               elapsed, left_dist, right_dist);
 
         rplidar_response_measurement_node_t nodes[8192];
         size_t count = _countof(nodes);
@@ -310,8 +369,16 @@ int main(int argc, const char *argv[]) {
     for (int y = 0; y < lastRow - firstRow; y++) {
         for (int x = 0; x < lastCol - firstCol; x++) {
             cv::Mat ROI = canvas(cv::Rect(x, y, 1, 1));
-            int color = mapArr[y + firstRow][x + firstCol] >= 1 ? 255 : 0;
-            ROI.setTo(cv::Scalar::all(color));
+            cv::Scalar color = cv::Scalar::all(0);// = mapArr[y][x] >= 2 ? 255 : 0;
+            int value = mapArr[y + firstRow][x + firstCol];
+            if (value >= 7) {
+                color = cv::Scalar(255, 0, 0);
+            } else if (value >= 5) {
+                color = cv::Scalar(100, 0, 0);
+            } else if (value >= 1) {
+                color = cv::Scalar(50, 100, 0);
+            }
+            ROI.setTo(color);
         }
     }
     cv::circle(canvas, cv::Point(static_cast<int>(curr_x - firstCol), static_cast<int>(curr_y - firstRow)), 4,
@@ -321,11 +388,12 @@ int main(int argc, const char *argv[]) {
     cv::Point2f vertices[4];
     rRect.points(vertices);
     for (int i = 0; i < 4; i++) {
-        line(canvas, vertices[i], vertices[(i + 1) % 4], cv::Scalar(0, 255, 0), 2);
+        cv::line(canvas, vertices[i], vertices[(i + 1) % 4], cv::Scalar(0, 255, 0), 2);
     }
 
     cout << "Display Map" << endl;
     cv::flip(canvas, canvas, 0);
+    cv::rotate(canvas, canvas, 0);
     cv::imwrite("hallMap.jpg", canvas);
     cv::imshow("Final Map", canvas);
     cv::waitKey(0);
@@ -340,7 +408,7 @@ int main(int argc, const char *argv[]) {
     DRIVE = false;
     imuThread.join();
     obstacleThread.join();
-    //driveThread.join();
+    driveThread.join();
     //mapThread.join();
 }
 
