@@ -141,50 +141,72 @@ int main(int argc, const char *argv[]) {
     double curr_x = WORLD_WIDTH / 2.0;
     double curr_y = WORLD_HEIGHT / 2.0;
 
+    int count = 0;
+
     auto updateMap = [&]() {
         printf("Map Thread Start:");
         while (RUNNING) {
-            printf("Updating Map\n");
-            cv::Mat canvas(250, 250, CV_8UC3, cv::Scalar(0));
-            for (int y = 0; y < 250; y += 3) {
-                for (int x = 0; x < 250; x += 3) {
-                    cv::Mat ROI = canvas(cv::Rect(x, y, 3, 3));
-                    int color =
-                            mapArr[static_cast<int>(y + curr_y - 125)][static_cast<int>(x + curr_x - 125)] >= 1 ? 255
-                                                                                                                : 0;
-                    ROI.setTo(cv::Scalar::all(color));
+            if (count % 10 == 0) {
+                printf("Updating Map %d\n", count);
+                cv::Mat canvas(255, 255, CV_8UC3, cv::Scalar(0));
+                for (int y = 0; y < 250; y += 5) {
+                    for (int x = 0; x < 250; x += 5) {
+                        cv::Mat ROI = canvas(cv::Rect(x, y, 3, 3));
+                        int color =
+                                mapArr[static_cast<int>(y + curr_y - 125)][static_cast<int>(x + curr_x - 125)] >= 1
+                                ? 255
+                                : 0;
+                        ROI.setTo(cv::Scalar::all(color));
+                    }
                 }
+                cv::circle(canvas, cv::Point(static_cast<int>(125), static_cast<int>(125)), 4, cv::Scalar(255, 0, 0),
+                           -1);
+                cv::RotatedRect rRect(cv::Point2f(static_cast<int>(125), static_cast<int>(125)), cv::Size2f(35, 45),
+                                      static_cast<float>(heading));
+                cv::Point2f vertices[4];
+                rRect.points(vertices);
+                for (int i = 0; i < 4; i++) {
+                    line(canvas, vertices[i], vertices[(i + 1) % 4], cv::Scalar(0, 255, 0), 2);
+                }
+                cv::flip(canvas, canvas, 1);
+                cv::imshow("Live Map", canvas);
+                cv::waitKey(10);
             }
-            cv::circle(canvas, cv::Point(static_cast<int>(125), static_cast<int>(125)), 4, cv::Scalar(255, 0, 0), -1);
-            cv::RotatedRect rRect(cv::Point2f(static_cast<int>(125), static_cast<int>(125)), cv::Size2f(35, 45),
-                                  static_cast<float>(heading));
-            cv::Point2f vertices[4];
-            rRect.points(vertices);
-            for (int i = 0; i < 4; i++) {
-                line(canvas, vertices[i], vertices[(i + 1) % 4], cv::Scalar(0, 255, 0), 2);
-            }
-            cv::flip(canvas, canvas, 1);
-            cv::imshow("Map", canvas);
-            cv::waitKey(10);
+            count++;
         }
     };
 
     //thread mapThread(updateMap);
 
+    double encoder_cm = 0;
+    double last_encoders = 0;
+    int elapsed = 0;
+
     resetEncoders(motor1, motor2);
     auto drive = [&](int speed, int dist) {
-        printf("Drive Thread Start:");
+        printf("Drive Thread Start:\n");
         motor1.setPower(static_cast<int8_t>(speed));
         motor2.setPower(static_cast<int8_t>(speed));
         while (RUNNING && DRIVE &&
                (motor1.getCurrentPosition() + motor2.getCurrentPosition()) / 2.0 / TICKS_PER_CM < dist) {
+
+            encoder_cm = (motor1.getCurrentPosition() + motor2.getCurrentPosition()) / 2.0 / TICKS_PER_CM;
+            //cout << "cm travel:" << (encoder_cm) << endl;
+            //curr_y = static_cast<int>(WORLD_HEIGHT / 2 + (encoder_averages / TICKS_PER_CM));
+            curr_y += (encoder_cm - last_encoders) * sin((heading + 90) * 3.14 / 180);
+            curr_x += (encoder_cm - last_encoders) * -cos((heading + 90) * 3.14 / 180);
+            last_encoders = encoder_cm;
+            printf("Y: %3.2f \t X: %3.2f \t Heading: %3.2f \t Time: %d \t Left: %d \t Right: %d\n", curr_y, curr_x,
+                   heading,
+                   elapsed, left_dist, right_dist);
+
             if (obstacle) {
                 cout << "Stop! Obstacle." << endl;
                 motor1.setPower(0);
                 motor2.setPower(0);
                 RUNNING = false;
                 break;
-            } else if (abs(left_dist - right_dist) < 5) {
+            } else if (abs(left_dist - right_dist) < 10) {
                 motor1.setPower(static_cast<int8_t>(speed));
                 motor2.setPower(static_cast<int8_t>(speed));
             } else if (left_dist < right_dist) {
@@ -263,33 +285,48 @@ int main(int argc, const char *argv[]) {
         }
     };
 
-    thread obstacleThread(obstacleCheck, 75);
-    thread driveThread(drive, 30, 2250);
+    int counter;
+
+    int targetDist = 200;
+    int targetPower = 20;
+    if (argc == 2) {
+        std::stringstream line(argv[1]);
+        line >> targetDist;
+    }
+    if (argc == 3) {
+        std::stringstream line1(argv[1]);
+        line1 >> targetDist;
+        std::stringstream line2(argv[2]);
+        line2 >> targetPower;
+    }
+
+    thread obstacleThread(obstacleCheck, 50);
+    thread driveThread(drive, targetPower, targetDist);
 
 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-    int elapsed = 0;
 
-    double encoder_cm = 0;
-    double last_encoders = 0;
+    /*double encoder_cm = 0;
+    double last_encoders = 0;*/
 
     //motor1.setPower(40);
     //motor2.setPower(40);
 
     // fetech result and print it out...
     //abs(encoder_cm)
+    printf("Inputs: Dist: %d, Power: %d\n", targetDist, targetPower);
     while (/*abs(encoder_cm) < 700 && */DRIVE && RUNNING && !obstacle) {
         std::chrono::steady_clock::time_point current = std::chrono::steady_clock::now();
         elapsed = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(current - begin).count());
 
-        encoder_cm = (motor1.getCurrentPosition() + motor2.getCurrentPosition()) / 2.0 / TICKS_PER_CM;
+        /*encoder_cm = (motor1.getCurrentPosition() + motor2.getCurrentPosition()) / 2.0 / TICKS_PER_CM;
         //cout << "cm travel:" << (encoder_cm) << endl;
         //curr_y = static_cast<int>(WORLD_HEIGHT / 2 + (encoder_averages / TICKS_PER_CM));
         curr_y += (encoder_cm - last_encoders) * sin((heading + 90) * 3.14 / 180);
         curr_x += (encoder_cm - last_encoders) * -cos((heading + 90) * 3.14 / 180);
         last_encoders = encoder_cm;
         printf("Y: %3.2f \t X: %3.2f \t Heading: %3.2f \t Time: %d \t Left: %d \t Right: %d\n", curr_y, curr_x, heading,
-               elapsed, left_dist, right_dist);
+               elapsed, left_dist, right_dist);*/
 
         rplidar_response_measurement_node_t nodes[8192];
         size_t count = _countof(nodes);
@@ -384,7 +421,7 @@ int main(int argc, const char *argv[]) {
     cv::circle(canvas, cv::Point(static_cast<int>(curr_x - firstCol), static_cast<int>(curr_y - firstRow)), 4,
                cv::Scalar(255, 0, 0), -1);
     cv::RotatedRect rRect(cv::Point2f(static_cast<int>(curr_x - firstCol), static_cast<int>(curr_y - firstRow)),
-                          cv::Size2f(35, 45), static_cast<float>(heading));
+                          cv::Size2f(35, 45), static_cast<float>(-heading));
     cv::Point2f vertices[4];
     rRect.points(vertices);
     for (int i = 0; i < 4; i++) {

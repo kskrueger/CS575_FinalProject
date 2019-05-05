@@ -38,6 +38,7 @@ file(GLOB ROBOT
 add_executable(Main ${hitec_control} ${IMU} PID.cpp main.cpp)
 add_executable(Main2 ${hitec_control} ${IMU} ${ROBOT} robot_test.cpp)
 add_executable(Post post_map_process.cpp)
+add_executable(Stream stream_test.cpp)
 ###### main.cpp ultra_simple.cpp simple.cpp cartesian.cpp telemetry_test.cpp imu_test.cpp test_python.cpp python_common.h
 
 target_link_libraries(Main wiringPi)
@@ -64,3 +65,4 @@ target_link_libraries(Main2 ${OpenCV_LIBS})
 target_link_libraries(Main ${PYTHON_LIBRARIES})
 target_link_libraries(Main2 ${PYTHON_LIBRARIES})
 target_link_libraries(Post ${OpenCV_LIBS})
+target_link_libraries(Stream ${OpenCV_LIBS})
